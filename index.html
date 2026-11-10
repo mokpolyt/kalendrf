@@ -53,7 +53,11 @@ header p{margin:6px 0 0;color:var(--muted)}
 .todos li:first-child .t{color:var(--top);font-weight:600}
 .del{background:none;border:0;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:0 2px}
 .del:hover{color:var(--ink)}
-.add{width:100%;border:0;border-bottom:1px dashed var(--line);background:transparent;color:var(--ink);font:inherit;font-size:14px;padding:4px 0}
+.addrow{display:flex;gap:6px;align-items:center}
+.addbtn{background:none;border:1px solid var(--line);color:var(--muted);border-radius:6px;font:inherit;font-size:13px;padding:3px 8px;cursor:pointer}
+.box.sun .addbtn{color:#e8b4bd;border-color:#a0535f}
+.todos .t{outline:none}
+.add{flex:1;min-width:0;width:100%;font-size:16px;border:0;border-bottom:1px dashed var(--line);background:transparent;color:var(--ink);font:inherit;font-size:16px;padding:4px 0}
 .add:focus{outline:none;border-bottom-color:var(--accent)}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
@@ -156,7 +160,9 @@ dialog summary{cursor:pointer;font-weight:600}
       var li=el("li",t.done?"done":"");
       var cb=el("input"); cb.type="checkbox"; cb.checked=!!t.done; cb.setAttribute("aria-label","Done: "+t.text);
       cb.onchange=function(){ t.done=cb.checked; save(); renderTodos(ul,k); };
-      var tx=el("span","t",t.text);
+      var tx=el("span","t",t.text); tx.contentEditable="true"; tx.setAttribute("enterkeyhint","done"); tx.spellcheck=false;
+      tx.onkeydown=function(e){ if(e.key==="Enter"){ e.preventDefault(); tx.blur(); } };
+      tx.onblur=function(){ var v=tx.textContent.trim(); if(!v){ day(k).todos.splice(i,1); } else { t.text=v; } save(); renderTodos(ul,k); };
       var d=el("button","del","×"); d.setAttribute("aria-label","Delete task"); d.type="button";
       d.onclick=function(){ day(k).todos.splice(i,1); save(); renderTodos(ul,k); };
       li.append(cb,tx,d); ul.append(li);
@@ -173,13 +179,20 @@ dialog summary{cursor:pointer;font-weight:600}
       head.append(el("span","num",String(date.getDate())), el("span","meta",wd[date.getDay()].slice(0,3)+" · "+mo[date.getMonth()].slice(0,3)), el("span","dot"));
       head.setAttribute("aria-label","Open notes for "+wd[date.getDay()]+" "+date.getDate()+" "+mo[date.getMonth()]);
       var ul=el("ul","todos"); renderTodos(ul,k);
-      var add=el("input","add"); add.placeholder="+ Add task"; add.setAttribute("aria-label","Add task");
-      add.onkeydown=function(e){
-        if(e.key==="Enter"&&add.value.trim()){ day(k).todos.push({text:add.value.trim(),done:false}); add.value=""; save(); renderTodos(ul,k); }
+      var form=el("form","addrow"); form.setAttribute("action","javascript:void(0)");
+      var add=el("input","add"); add.type="text"; add.placeholder="+ Add task"; add.setAttribute("aria-label","Add task");
+      add.setAttribute("enterkeyhint","done"); add.setAttribute("autocomplete","off"); add.setAttribute("autocapitalize","sentences");
+      var plus=el("button","addbtn","Add"); plus.type="submit";
+      form.onsubmit=function(e){
+        e.preventDefault();
+        var v=add.value.trim();
+        if(v){ day(k).todos.push({text:v,done:false}); add.value=""; save(); renderTodos(ul,k); }
+        return false;
       };
-      box.append(head,ul,add); grid.append(box); markNote(box,k);
+      form.append(add,plus);
+      box.append(head,ul,form); grid.append(box); markNote(box,k);
       box.addEventListener("click",function(e){
-        if(e.target.closest("input,.del,.todos li")) return;
+        if(e.target.closest("input,button.addbtn,form,.del,.todos li")) return;
         open(date,k,box);
       });
     })(new Date(d));
