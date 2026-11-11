@@ -114,7 +114,7 @@ dialog summary{cursor:pointer;font-weight:600}
 <body>
 <header>
   <form class="topbar" id="shoutForm" action="javascript:void(0)">
-    <input class="shout" id="shout" type="text" maxlength="80" placeholder="Type anything and press Enter — it will float around…" aria-label="Floating text" autocomplete="off" enterkeyhint="done">
+    <input class="shout" id="shout" type="text" maxlength="80" placeholder="Type and press Enter to float it (a new one replaces the old; type . to erase)" aria-label="Floating text" autocomplete="off" enterkeyhint="done">
     <button class="dl" id="dl" type="button">Download .xlsx</button>
   </form>
   <nav class="tabs" aria-label="Pages">
@@ -201,8 +201,10 @@ dialog summary{cursor:pointer;font-weight:600}
   document.getElementById("shoutForm").onsubmit=function(e){
     e.preventDefault();
     var v=shout.value.trim(); if(!v) return false;
-    var f={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),text:v,hue:Math.floor(rnd(0,360)),size:Math.round(rnd(56,120)),at:new Date().toISOString()};
-    floaters.push(f); shout.value=""; spawn(f); saveF();
+    var f={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),text:v,hue:Math.floor(rnd(0,360)),size:Math.round(rnd(110,190)),at:new Date().toISOString()};
+    shout.value="";
+    if(v==="."){ floaters=[]; renderFloaters(); saveF(); return false; }
+    floaters=[f]; renderFloaters(); saveF();
     return false;
   };
   renderFloaters();
@@ -320,9 +322,8 @@ dialog summary{cursor:pointer;font-weight:600}
       rows.forEach(function(r){
         if(r.day_key===FID){
           try{
-            var remote=JSON.parse(r.note||"[]")||[], have={};
-            floaters.forEach(function(f){ have[f.id]=1; });
-            remote.forEach(function(f){ if(!have[f.id]) floaters.push(f); });
+            var remote=JSON.parse(r.note||"[]")||[];
+            floaters=remote;
             syncedF=JSON.stringify(remote);
             try{ localStorage.setItem(FKEY,JSON.stringify(floaters)); }catch(e){}
             renderFloaters();
