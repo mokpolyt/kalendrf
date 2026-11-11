@@ -101,10 +101,22 @@ dialog summary{cursor:pointer;font-weight:600}
 .saved{font-size:13px;color:var(--muted);min-height:18px}
 @media (max-width:700px){.panel{width:100%}}
 @media (prefers-reduced-motion:reduce){.panel,.scrim{transition:none}}
+
+.topbar{display:flex;gap:10px;align-items:center;margin-bottom:22px}
+.shout{flex:1;min-width:0;font:inherit;font-size:18px;padding:11px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink)}
+.shout:focus{outline:none;border-color:var(--accent)}
+.dl{flex:none;background:var(--accent);color:var(--accent-ink);border:0;border-radius:10px;padding:12px 18px;font:inherit;font-weight:600;font-size:15px;cursor:pointer;white-space:nowrap}
+.dl:hover{filter:brightness(1.1)}
+.stage{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:3}
+.float{position:absolute;left:0;top:0;white-space:nowrap;font-weight:800;letter-spacing:-.03em;line-height:1.1;will-change:transform;user-select:none;pointer-events:none;opacity:.55}
 </style>
 </head>
 <body>
 <header>
+  <form class="topbar" id="shoutForm" action="javascript:void(0)">
+    <input class="shout" id="shout" type="text" maxlength="80" placeholder="Type anything and press Enter — it will float around…" aria-label="Floating text" autocomplete="off" enterkeyhint="done">
+    <button class="dl" id="dl" type="button">Download .xlsx</button>
+  </form>
   <nav class="tabs" aria-label="Pages">
     <span class="tab current" aria-current="page">Planner</span>
     <a class="tab" href="https://kalendre.vercel.app" target="_blank" rel="noopener noreferrer">Kalendre</a>
@@ -114,6 +126,7 @@ dialog summary{cursor:pointer;font-weight:600}
   <p>Add tasks in any day. Click a day to write a headline and notes.</p>
 </header>
 <main class="grid" id="grid"></main>
+<div class="stage" id="stage" aria-hidden="true"></div>
 <div class="scrim" id="scrim"></div>
 <aside class="panel" id="panel" aria-hidden="true" aria-label="Day notes">
   <div class="ptop"><span class="pdate" id="pdate"></span><button class="close" id="close">Close</button></div>
@@ -121,6 +134,7 @@ dialog summary{cursor:pointer;font-weight:600}
   <textarea class="body" id="body" placeholder="Write your notes for this day…" aria-label="Notes"></textarea>
   <div class="saved" id="saved"></div>
 </aside>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 (function(){
   /* ===== EDIT THESE TWO LINES ===== */
@@ -151,6 +165,70 @@ dialog summary{cursor:pointer;font-weight:600}
   var wd=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
   var mo=["January","February","March","April","May","June","July","August","September","October","November","December"];
   var todayId=id(new Date());
+
+  /* ---- Floating text ---- */
+  var FKEY="planner-floaters", FID="_floaters", floaters=[], syncedF="", fx=[];
+  try{ floaters=JSON.parse(localStorage.getItem(FKEY)||"[]")||[]; }catch(e){ floaters=[]; }
+  var stage=document.getElementById("stage");
+  var reduce=window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function rnd(a,b){ return a+Math.random()*(b-a); }
+  function saveF(){ try{ localStorage.setItem(FKEY,JSON.stringify(floaters)); }catch(e){} save(); }
+  function spawn(f){
+    var n=el("span","float",f.text);
+    var scale=Math.min(1,window.innerWidth/800);
+    n.style.fontSize=Math.round(f.size*Math.max(.5,scale))+"px";
+    n.style.color="hsl("+f.hue+",75%,55%)";
+    stage.append(n);
+    var w=n.offsetWidth,h=n.offsetHeight,W=window.innerWidth,H=window.innerHeight;
+    var o={n:n,w:w,h:h,x:rnd(Math.min(0,W-w),Math.max(0,W-w)),y:rnd(0,Math.max(0,H-h)),
+      vx:(Math.random()<.5?-1:1)*rnd(.7,2),vy:(Math.random()<.5?-1:1)*rnd(.6,1.8)};
+    n.style.transform="translate("+o.x+"px,"+o.y+"px)";
+    fx.push(o);
+  }
+  function renderFloaters(){ stage.innerHTML=""; fx=[]; floaters.forEach(spawn); }
+  function tick(){
+    var W=window.innerWidth,H=window.innerHeight;
+    fx.forEach(function(o){
+      o.x+=o.vx; o.y+=o.vy;
+      var loX=Math.min(0,W-o.w),hiX=Math.max(0,W-o.w),loY=Math.min(0,H-o.h),hiY=Math.max(0,H-o.h);
+      if(o.x<loX){o.x=loX;o.vx=Math.abs(o.vx);} else if(o.x>hiX){o.x=hiX;o.vx=-Math.abs(o.vx);}
+      if(o.y<loY){o.y=loY;o.vy=Math.abs(o.vy);} else if(o.y>hiY){o.y=hiY;o.vy=-Math.abs(o.vy);}
+      o.n.style.transform="translate("+o.x+"px,"+o.y+"px)";
+    });
+    requestAnimationFrame(tick);
+  }
+  var shout=document.getElementById("shout");
+  document.getElementById("shoutForm").onsubmit=function(e){
+    e.preventDefault();
+    var v=shout.value.trim(); if(!v) return false;
+    var f={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),text:v,hue:Math.floor(rnd(0,360)),size:Math.round(rnd(56,120)),at:new Date().toISOString()};
+    floaters.push(f); shout.value=""; spawn(f); saveF();
+    return false;
+  };
+  renderFloaters();
+  if(!reduce) requestAnimationFrame(tick);
+
+  /* ---- Download everything as .xlsx ---- */
+  function exportXlsx(){
+    if(typeof XLSX==="undefined"){ alert("Excel library failed to load. Check your internet connection and try again."); return; }
+    var days=[["Date","Weekday","Headline","Notes","Open tasks","Done tasks"]], tasks=[["Date","Task","Done"]];
+    for(var d=new Date(START); d<=END; d=new Date(d.getFullYear(),d.getMonth(),d.getDate()+1)){
+      var k=id(d), s=state[k]||{todos:[],headline:"",note:""};
+      var iso=d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2);
+      var open=s.todos.filter(function(t){return !t.done;}).map(function(t){return t.text;});
+      var done=s.todos.filter(function(t){return t.done;}).map(function(t){return t.text;});
+      days.push([iso,wd[d.getDay()],s.headline||"",s.note||"",open.join("\n"),done.join("\n")]);
+      s.todos.forEach(function(t){ tasks.push([iso,t.text,t.done?"Yes":"No"]); });
+    }
+    var fl=[["Added","Floating text"]].concat(floaters.map(function(f){ return [f.at||"",f.text]; }));
+    var wb=XLSX.utils.book_new();
+    function add(name,rows,widths){ var ws=XLSX.utils.aoa_to_sheet(rows); ws["!cols"]=widths.map(function(w){return {wch:w};}); XLSX.utils.book_append_sheet(wb,ws,name); }
+    add("Days",days,[12,12,28,60,40,40]);
+    add("Tasks",tasks,[12,60,8]);
+    add("Floating text",fl,[26,60]);
+    XLSX.writeFile(wb,"planner-2026.xlsx");
+  }
+  document.getElementById("dl").onclick=exportXlsx;
 
   function el(t,c,txt){ var e=document.createElement(t); if(c)e.className=c; if(txt!=null)e.textContent=txt; return e; }
 
@@ -240,6 +318,17 @@ dialog summary{cursor:pointer;font-weight:600}
     setStatus("Syncing…");
     return api(TABLE+"?select=*").then(function(rows){
       rows.forEach(function(r){
+        if(r.day_key===FID){
+          try{
+            var remote=JSON.parse(r.note||"[]")||[], have={};
+            floaters.forEach(function(f){ have[f.id]=1; });
+            remote.forEach(function(f){ if(!have[f.id]) floaters.push(f); });
+            syncedF=JSON.stringify(remote);
+            try{ localStorage.setItem(FKEY,JSON.stringify(floaters)); }catch(e){}
+            renderFloaters();
+          }catch(e){}
+          return;
+        }
         state[r.day_key]={todos:r.todos||[],headline:r.headline||"",note:r.note||""};
         synced[r.day_key]=JSON.stringify(state[r.day_key]);
       });
@@ -257,10 +346,15 @@ dialog summary{cursor:pointer;font-weight:600}
       sent[k]=j;
       rows.push({day_key:k,headline:s.headline,note:s.note,todos:s.todos,updated_at:new Date().toISOString()});
     });
+    var fj=JSON.stringify(floaters);
+    if(fj!==syncedF && (floaters.length||syncedF)){
+      rows.push({day_key:FID,headline:"",note:fj,todos:[],updated_at:new Date().toISOString()});
+      sent[FID]=fj;
+    }
     if(!rows.length) return;
     setStatus("Saving…");
     api(TABLE+"?on_conflict=day_key",{method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=minimal"},body:JSON.stringify(rows)})
-      .then(function(){ Object.keys(sent).forEach(function(k){ synced[k]=sent[k]; }); setStatus("Saved to Supabase"); })
+      .then(function(){ Object.keys(sent).forEach(function(k){ if(k===FID) syncedF=sent[k]; else synced[k]=sent[k]; }); setStatus("Saved to Supabase"); })
       .catch(function(e){ setStatus("Save failed: "+String(e.message).slice(0,140)); });
   }
   pull();
